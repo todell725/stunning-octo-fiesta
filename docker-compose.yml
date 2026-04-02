@@ -1,0 +1,51 @@
+services:
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      # For local multi-arch, override with: docker compose build --build-arg TARGETPLATFORM=linux/arm64
+    image: invoice-tracker-server:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/data/prod.db
+      UPLOAD_DIR: /data/uploads
+      PORT: "3001"
+      OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
+      # Optional — set in .env to switch OCR providers:
+      # GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcloud_key
+      # AWS_REGION: us-east-1
+    volumes:
+      # SQLite database + uploaded files persist here
+      - invoice_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - invoice_net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    image: invoice-tracker-client:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - invoice_net
+
+volumes:
+  invoice_data:
+    driver: local
+
+networks:
+  invoice_net:
+    driver: bridge

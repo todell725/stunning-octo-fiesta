@@ -1,12 +1,65 @@
 # Invoice Tracker
 
-A full-stack invoice management system with mobile camera capture, Tesseract.js OCR, SQLite FTS5 full-text search, and complete CRUD for invoices, customers, and payments.
+A full-stack invoice management system for tracking incoming inventory invoices. Includes mobile camera capture, Tesseract.js OCR, SQLite FTS5 full-text search, analytics dashboard, and complete CRUD for invoices, customers, and payments.
 
-**Stack:** Node.js · TypeScript · Fastify · Prisma · SQLite · React · Vite · TailwindCSS
+**Stack:** Node.js · TypeScript · Fastify · Prisma · SQLite · React · Vite · TailwindCSS · Recharts  
+**Deploy:** Docker (multi-platform `linux/amd64` + `linux/arm64`)
 
 ---
 
-## Quick Start
+## Running with Docker (recommended for deployment)
+
+The easiest way to run the full stack in production.
+
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) ≥ 24 with Buildx
+
+### One-command start
+
+```bash
+# Clone and start (builds both images locally)
+docker compose up --build
+```
+
+Open **http://localhost:8080**. Data (SQLite DB + uploaded files) persists in a Docker named volume.
+
+### Configuration
+
+```bash
+cp .env.docker .env
+# Edit APP_PORT, OCR_PROVIDER as needed
+docker compose up --build
+```
+
+### Multi-platform build (push to registry)
+
+```bash
+# Build for both amd64 and arm64, push to Docker Hub
+./build.sh --push --registry yourdockerhubuser
+
+# Or push to GitHub Container Registry
+./build.sh --push --registry ghcr.io/yourorg
+```
+
+### Useful Docker commands
+
+```bash
+docker compose up -d          # Start in background
+docker compose down           # Stop
+docker compose logs -f server # Follow server logs
+docker compose exec server sh # Shell into container
+
+# Seed sample data inside the container
+docker compose exec server node dist/seed.js
+
+# Backup the database
+docker run --rm -v invoice_data:/data -v $(pwd):/backup alpine \
+  cp /data/prod.db /backup/backup.db
+```
+
+---
+
+## Quick Start (local development)
 
 ### Prerequisites
 
@@ -93,7 +146,8 @@ Open **http://localhost:5173** after starting both servers.
 | Dashboard | `/dashboard` | Stats overview + recent invoices |
 | Invoices | `/invoices` | List, filter by status, paginate |
 | New Invoice | `/invoices/new` | Create invoice with line items |
-| Customers | `/customers` | Manage customers |
+| Customers | `/customers` | Manage vendors/customers |
+| Analytics | `/analytics` | Charts: spend trend, aging, top vendors, tag breakdown |
 | Search | `/search` | Full-text search + filters + CSV export |
 | Capture | `/capture` | Mobile camera / OCR upload |
 
@@ -158,6 +212,24 @@ OCR_PROVIDER=google-vision
 # AWS Textract (requires @aws-sdk/client-textract package + AWS credentials)
 OCR_PROVIDER=aws-textract
 ```
+
+---
+
+## Analytics
+
+The analytics page (`/analytics`) gives a full picture of your incoming inventory invoices:
+
+| Widget | Description |
+|--------|-------------|
+| KPI cards | Total invoices, total spend, paid, outstanding, overdue count/amount, avg days to pay, pay rate |
+| Monthly Spend Trend | Area chart — invoiced vs. paid over the last 13 months |
+| Invoice Aging | Bar chart — unpaid invoices bucketed by how overdue they are |
+| Spend by Status | Donut chart — amount breakdown across draft/sent/paid/overdue |
+| Top Vendors | Horizontal bar — your highest-spend vendors side-by-side with what's been paid |
+| Spend by Tag | Horizontal bar — break down spend by invoice tag (e.g. truck ID, category) |
+| Overdue Table | Actionable list — overdue invoices with days past due, links to invoice detail |
+
+**Tip:** Tag invoices with truck IDs or categories (e.g. `truck-12`, `fuel`, `parts`) to get per-truck spend breakdowns in Analytics.
 
 ---
 

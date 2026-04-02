@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import {
-  FileText, Users, Search, Camera, LayoutDashboard, Menu, X
+  FileText, Users, Search, Camera, LayoutDashboard, Menu, X, BarChart2
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -13,11 +13,13 @@ import CustomerDetailPage from './pages/CustomerDetailPage';
 import SearchPage from './pages/SearchPage';
 import CameraCapturePage from './pages/CameraCapturePage';
 import DashboardPage from './pages/DashboardPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/customers', icon: Users, label: 'Customers' },
+  { to: '/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/capture', icon: Camera, label: 'Capture' },
 ];
@@ -104,6 +106,7 @@ export default function App() {
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/customers/:id" element={<CustomerDetailPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/capture" element={<CameraCapturePage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

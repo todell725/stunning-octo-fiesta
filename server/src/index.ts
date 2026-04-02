@@ -14,6 +14,7 @@ import { setupFTS } from './db';
 import customerRoutes from './routes/customers';
 import invoiceRoutes from './routes/invoices';
 import searchRoutes from './routes/search';
+import analyticsRoutes from './routes/analytics';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
@@ -60,6 +61,7 @@ async function buildApp() {
   await app.register(customerRoutes, { prefix: '/api' });
   await app.register(invoiceRoutes, { prefix: '/api' });
   await app.register(searchRoutes, { prefix: '/api' });
+  await app.register(analyticsRoutes, { prefix: '/api' });
 
   return app;
 }
