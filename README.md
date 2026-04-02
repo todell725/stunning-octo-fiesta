@@ -1,72 +1,43 @@
-# Invoice Tracker — Full-Stack with OCR + Mobile Camera Capture
+# Invoice Tracker
 
-A full-featured invoice management system with SQLite FTS5 search, Tesseract.js OCR, mobile camera capture, and complete CRUD for invoices, customers, and payments.
+A full-stack invoice management system with mobile camera capture, Tesseract.js OCR, SQLite FTS5 full-text search, and complete CRUD for invoices, customers, and payments.
 
----
-
-## Architecture Overview
-
-```
-stunning-octo-fiesta/
-├── server/            # Node.js + TypeScript + Fastify backend
-│   ├── src/
-│   │   ├── index.ts              # App entry point
-│   │   ├── db.ts                 # Prisma client + FTS5 setup
-│   │   ├── routes/
-│   │   │   ├── invoices.ts       # Invoice CRUD + OCR endpoints
-│   │   │   ├── customers.ts      # Customer CRUD
-│   │   │   └── search.ts         # FTS5 search + CSV export
-│   │   ├── services/
-│   │   │   ├── ocr.ts            # Pluggable OCR (Tesseract/Google/AWS)
-│   │   │   ├── ocrParser.ts      # Regex + heuristic text extraction
-│   │   │   └── fts.ts            # FTS5 index management + search
-│   │   ├── utils/
-│   │   │   ├── invoiceTotals.ts  # Subtotal/tax/total calculation
-│   │   │   └── invoiceNumber.ts  # Auto-incrementing invoice numbers
-│   │   ├── seed.ts               # Sample data seed
-│   │   └── __tests__/
-│   │       ├── ocrParser.test.ts # OCR parsing unit tests
-│   │       └── search.test.ts    # API search integration tests
-│   └── prisma/
-│       └── schema.prisma         # Data model
-├── client/            # React + Vite + TailwindCSS frontend
-│   └── src/
-│       ├── pages/
-│       │   ├── DashboardPage.tsx
-│       │   ├── InvoicesPage.tsx
-│       │   ├── InvoiceDetailPage.tsx
-│       │   ├── InvoiceFormPage.tsx
-│       │   ├── CustomersPage.tsx
-│       │   ├── CustomerDetailPage.tsx
-│       │   ├── SearchPage.tsx
-│       │   └── CameraCapturePage.tsx  # Mobile OCR capture
-│       └── test/
-│           └── CameraCapture.test.tsx
-└── README.md
-```
+**Stack:** Node.js · TypeScript · Fastify · Prisma · SQLite · React · Vite · TailwindCSS
 
 ---
 
-## Local Setup
+## Quick Start
 
 ### Prerequisites
 
-- Node.js ≥ 18
-- npm ≥ 9
+- **Node.js** ≥ 18 — [nodejs.org](https://nodejs.org)
+- **npm** ≥ 9 (comes with Node)
 
 ### 1. Install dependencies
 
 ```bash
-cd server && npm install
-cd ../client && npm install
+# Backend
+cd server
+npm install
+
+# Frontend (new terminal tab)
+cd client
+npm install
 ```
 
 ### 2. Set up the database
 
 ```bash
 cd server
+
+# Run migrations (creates SQLite DB + all tables including FTS5)
 npx prisma migrate dev --name init
-npm run db:seed       # Loads 30 sample invoices across 5 customers
+
+# Generate the Prisma client
+npx prisma generate
+
+# Load sample data (5 customers, 30 invoices)
+npm run db:seed
 ```
 
 ### 3. Start the backend
@@ -74,85 +45,92 @@ npm run db:seed       # Loads 30 sample invoices across 5 customers
 ```bash
 cd server
 npm run dev
-# Server on http://localhost:3001
 ```
+
+The API server starts at **http://localhost:3001**
 
 ### 4. Start the frontend
 
 ```bash
 cd client
 npm run dev
-# App on http://localhost:5173
 ```
 
-Open **http://localhost:5173** in your browser.
+The app opens at **http://localhost:5173**
 
 ---
 
-## Features
+## Running Tests
 
-### Invoices
-- Create / edit / delete invoices with line items
-- Automatic subtotal + tax + total calculation
-- Status management: `draft` → `sent` → `paid` / `overdue` / `void`
-- Partial payment recording with payment history
-- Internal notes (not visible on invoice)
-- Tags for categorization
-- PO number tracking
-
-### Customers
-- Full CRUD: name, email, phone, address, notes
-- Invoice history per customer
-- Search by name, email, phone
-
-### Search
-- **Full-text search** powered by SQLite FTS5 (Porter stemming)
-- Searches across: invoice number, customer name/email/phone, PO number, notes, tags, OCR text
-- Filter by: status, total range, issue date range, due date range, tags
-- Sort by: date, total, invoice number, customer name
-- Pagination (20 per page)
-- **Export to CSV** (all matching results)
-
-### OCR & Mobile Camera
-
-See dedicated section below.
-
----
-
-## How to Test OCR
-
-### Option A — Camera on mobile
-
-1. Open the app on your phone at `http://<your-ip>:5173/capture`
-2. Tap **Open Camera** — your phone's rear camera opens
-3. Point at any invoice or receipt and tap **Capture**
-4. Tap **Extract Text (OCR)** — the server runs Tesseract.js
-5. Review the **Parsed Fields** tab: invoice number, dates, totals, line items
-6. Edit any field, then click **Apply to New Invoice**
-7. The invoice form pre-fills with OCR data; confirm and save
-
-### Option B — Upload an image
-
-1. Navigate to `/capture` (Capture in the sidebar)
-2. Click **Upload Image** and pick any invoice image (JPG, PNG, PDF)
-3. After upload, OCR runs automatically
-4. Review results and click **Apply to New Invoice**
-
-### Option C — Attach OCR image to existing invoice
-
-1. Open any invoice detail page
-2. Click **Attach File** (or **Camera**)
-3. After upload, OCR runs and extracted text is stored in `attachments.ocr_extracted_text`
-4. Extracted text is indexed in FTS5 — immediately searchable
-
-### Option D — API directly
+### Backend (OCR parsing + API search)
 
 ```bash
-# Upload image and get OCR + parsed data back
-curl -X POST http://localhost:3001/api/invoices/upload \
-  -F "file=@/path/to/invoice.jpg"
+cd server
+npm test
+```
 
-# Returns:
+Runs 49 tests:
+- `ocrParser.test.ts` — 28 unit tests for invoice text extraction
+- `search.test.ts` — 21 API integration tests (search, filters, pagination, CSV)
+
+### Frontend (camera UI smoke tests)
+
+```bash
+cd client
+npm test
+```
+
+Runs 9 smoke tests for the camera capture page.
+
+---
+
+## Using the App
+
+Open **http://localhost:5173** after starting both servers.
+
+| Page | Path | What it does |
+|------|------|-------------|
+| Dashboard | `/dashboard` | Stats overview + recent invoices |
+| Invoices | `/invoices` | List, filter by status, paginate |
+| New Invoice | `/invoices/new` | Create invoice with line items |
+| Customers | `/customers` | Manage customers |
+| Search | `/search` | Full-text search + filters + CSV export |
+| Capture | `/capture` | Mobile camera / OCR upload |
+
+---
+
+## OCR & Camera Capture
+
+### On mobile (phone browser)
+
+1. Open **http://\<your-ip\>:5173/capture** on your phone
+2. Tap **Open Camera** — uses your rear camera
+3. Point at any invoice or receipt and tap **Capture**
+4. Tap **Extract Text (OCR)** — Tesseract.js runs on the server
+5. Review the **Parsed Fields** tab (invoice #, dates, totals, line items auto-detected)
+6. Edit any field, then tap **Apply to New Invoice**
+7. The create-invoice form pre-fills with extracted data
+
+> **HTTPS note:** `getUserMedia()` requires HTTPS or `localhost`. For LAN access from a phone, use [ngrok](https://ngrok.com):
+> ```bash
+> ngrok http 5173
+> # Use the https:// URL ngrok gives you on your phone
+> ```
+
+### On desktop (file upload)
+
+1. Go to `/capture` and click **Upload Image**
+2. Pick any invoice image (JPG, PNG) or PDF
+3. OCR runs automatically; review and apply to an invoice
+
+### Via API
+
+```bash
+# Upload image → get raw OCR text + parsed fields
+curl -X POST http://localhost:3001/api/invoices/upload \
+  -F "file=@invoice.jpg"
+
+# Response:
 # {
 #   "ocrText": "Invoice Number: INV-2024-0001...",
 #   "confidence": 82,
@@ -160,112 +138,138 @@ curl -X POST http://localhost:3001/api/invoices/upload \
 #     "invoiceNumber": "INV-2024-0001",
 #     "total": 1320,
 #     "subtotal": 1200,
-#     ...
+#     "issueDate": "2024-06-01",
+#     "dueDate": "2024-06-30"
 #   }
 # }
 ```
 
-### Using a Different OCR Provider
+### Switch OCR provider
 
-Set the `OCR_PROVIDER` env variable in `server/.env`:
+Edit `server/.env`:
 
 ```env
-# Default (open source, no API key needed)
+# Default — open source, no API key needed
 OCR_PROVIDER=tesseract
 
-# Google Cloud Vision (requires @google-cloud/vision + GOOGLE_APPLICATION_CREDENTIALS)
+# Google Cloud Vision (requires @google-cloud/vision package + credentials)
 OCR_PROVIDER=google-vision
 
-# AWS Textract (requires @aws-sdk/client-textract + AWS credentials)
+# AWS Textract (requires @aws-sdk/client-textract package + AWS credentials)
 OCR_PROVIDER=aws-textract
 ```
 
 ---
 
-## How to Use Camera on Mobile
+## Search
 
-The app uses the browser's native **`getUserMedia()`** API for camera access.
+The search page (`/search`) supports:
 
-**Requirements:**
-- Must be served over **HTTPS** (or `localhost`) — browsers block camera on plain HTTP
-- On mobile, the app automatically requests the rear camera (`facingMode: environment`)
-- A **flip camera** button lets you switch to the front camera
-
-**Development over local network:**
-
-```bash
-# Start the backend with host 0.0.0.0 (already configured)
-cd server && npm run dev
-
-# Start the frontend with host flag
-cd client && npm run dev -- --host
-
-# Access from your phone: http://192.168.x.x:5173/capture
-# Note: getUserMedia works on localhost; for LAN access you may need to
-# configure a self-signed cert or use a tunneling service like ngrok
-```
-
-**Ngrok for HTTPS tunnel (recommended for mobile testing):**
-
-```bash
-ngrok http 5173
-# Use the https:// URL provided by ngrok on your phone
-```
-
-**Mobile file input fallback:**
-
-On devices where camera API is blocked or unavailable, the **Upload Image** button
-opens the native file picker which allows taking a photo on iOS/Android.
+- **Full-text query** — matches invoice numbers, customer names, emails, PO numbers, notes, tags, and OCR-extracted text
+- **Filters** — status, total range, issue/due date range, tags
+- **Sort** — by date, total, invoice number, or customer name
+- **Pagination** — 20 per page
+- **CSV export** — downloads all matching results
 
 ---
 
-## Running Tests
+## Environment Variables
 
-### Backend tests (OCR parsing + API search)
+Both files are in `server/` — copy and edit as needed.
+
+**`server/.env`** (development):
+
+```env
+DATABASE_URL="file:./dev.db"
+PORT=3001
+UPLOAD_DIR="uploads"
+MAX_FILE_SIZE_MB=20
+NODE_ENV=development
+OCR_PROVIDER=tesseract
+```
+
+**`server/.env.test`** (used automatically during `npm test`):
+
+```env
+DATABASE_URL="file:./test.db"
+PORT=3002
+UPLOAD_DIR="uploads_test"
+NODE_ENV=test
+```
+
+---
+
+## Database Commands
 
 ```bash
 cd server
-npm test
 
-# Run with coverage
-npm test -- --coverage
+# Reset DB and re-seed (wipes all data)
+npm run db:reset
+
+# Just re-seed (keeps schema, replaces data)
+npm run db:seed
+
+# Open Prisma Studio (visual DB browser)
+npx prisma studio
 ```
 
-Tests are in `server/src/__tests__/`:
-- `ocrParser.test.ts` — 20+ unit tests for OCR regex extraction
-- `search.test.ts` — API integration tests for search, filtering, sorting, CSV export
+---
 
-### Frontend tests (camera UI smoke tests)
+## Project Structure
 
-```bash
-cd client
-npm test
 ```
-
-Test is in `client/src/test/CameraCapture.test.tsx` — renders the camera page and
-tests button visibility, getUserMedia error handling, and file input.
+stunning-octo-fiesta/
+├── server/
+│   ├── prisma/
+│   │   └── schema.prisma          # Data model (7 tables + FTS5 migration)
+│   └── src/
+│       ├── index.ts               # Fastify app entry point
+│       ├── db.ts                  # Prisma client + FTS5 table setup
+│       ├── routes/
+│       │   ├── invoices.ts        # Invoice CRUD, payments, attachments, OCR
+│       │   ├── customers.ts       # Customer CRUD
+│       │   └── search.ts          # FTS5 search + CSV export
+│       ├── services/
+│       │   ├── ocr.ts             # OCR provider factory (Tesseract/Google/AWS)
+│       │   ├── ocrParser.ts       # Text → structured invoice fields
+│       │   └── fts.ts             # FTS5 index management + search queries
+│       ├── utils/
+│       │   ├── invoiceTotals.ts   # Subtotal/tax/total calculation
+│       │   └── invoiceNumber.ts   # Auto-increment invoice numbers
+│       ├── seed.ts                # Sample data
+│       └── __tests__/
+│           ├── ocrParser.test.ts  # OCR parsing unit tests
+│           └── search.test.ts     # API integration tests
+└── client/
+    └── src/
+        ├── App.tsx                # Router + sidebar layout
+        ├── pages/
+        │   ├── DashboardPage.tsx
+        │   ├── InvoicesPage.tsx
+        │   ├── InvoiceDetailPage.tsx
+        │   ├── InvoiceFormPage.tsx   # OCR prefill support
+        │   ├── CustomersPage.tsx
+        │   ├── CustomerDetailPage.tsx
+        │   ├── SearchPage.tsx
+        │   └── CameraCapturePage.tsx # getUserMedia + OCR review panel
+        └── test/
+            └── CameraCapture.test.tsx
+```
 
 ---
 
 ## API Reference
 
-### Customers
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/customers` | List customers (paginated, searchable) |
-| GET | `/api/customers/:id` | Get customer + recent invoices |
-| POST | `/api/customers` | Create customer |
-| PUT | `/api/customers/:id` | Update customer |
-| DELETE | `/api/customers/:id` | Delete customer |
-
 ### Invoices
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/invoices` | List invoices (paginated, filter by status) |
-| GET | `/api/invoices/:id` | Get invoice with all relations |
-| POST | `/api/invoices` | Create invoice with line items |
-| PUT | `/api/invoices/:id` | Update invoice |
-| DELETE | `/api/invoices/:id` | Delete invoice + attachments |
+| GET | `/api/invoices` | List (paginated, filter by status) |
+| GET | `/api/invoices/:id` | Get with all relations |
+| POST | `/api/invoices` | Create with line items |
+| PUT | `/api/invoices/:id` | Update |
+| DELETE | `/api/invoices/:id` | Delete + remove attachment files |
 | POST | `/api/invoices/:id/line-items` | Add line item |
 | PUT | `/api/invoices/:id/line-items/:itemId` | Update line item |
 | DELETE | `/api/invoices/:id/line-items/:itemId` | Remove line item |
@@ -273,60 +277,42 @@ tests button visibility, getUserMedia error handling, and file input.
 | DELETE | `/api/invoices/:id/payments/:paymentId` | Delete payment |
 | POST | `/api/invoices/:id/notes` | Add internal note |
 | DELETE | `/api/invoices/:id/notes/:noteId` | Delete note |
-| POST | `/api/invoices/:id/attachments` | Upload attachment (with OCR) |
+| POST | `/api/invoices/:id/attachments` | Upload file (OCR runs automatically) |
 | DELETE | `/api/invoices/:id/attachments/:attachmentId` | Delete attachment |
-| POST | `/api/invoices/:id/ocr-parse` | OCR-parse an image, attach to invoice |
-| POST | `/api/invoices/upload` | Upload + OCR (for new invoice creation) |
+| POST | `/api/invoices/:id/ocr-parse` | Upload image → OCR → attach to invoice |
+| POST | `/api/invoices/upload` | Upload image → OCR → return parsed fields |
+
+### Customers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/customers` | List (paginated, searchable) |
+| GET | `/api/customers/:id` | Get with recent invoices |
+| POST | `/api/customers` | Create |
+| PUT | `/api/customers/:id` | Update |
+| DELETE | `/api/customers/:id` | Delete |
 
 ### Search
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/search` | Full-text + filtered search |
-| GET | `/api/search/export` | Export search results as CSV |
+| GET | `/api/search/export` | Same, returns CSV download |
 
-**Search query parameters:**
+**Query params for search:**
 
-| Param | Description |
-|-------|-------------|
-| `q` | Full-text query (FTS5 match) |
-| `status` | Filter by status |
-| `customerId` | Filter by customer |
-| `minTotal` | Minimum total amount |
-| `maxTotal` | Maximum total amount |
-| `issueDateFrom` | Issue date start (YYYY-MM-DD) |
-| `issueDateTo` | Issue date end |
-| `dueDateFrom` | Due date start |
-| `dueDateTo` | Due date end |
-| `tags` | Comma-separated tags to filter |
-| `sortBy` | `issueDate` \| `dueDate` \| `total` \| `invoiceNumber` \| `customerName` |
-| `sortDir` | `asc` \| `desc` |
-| `page` | Page number (default: 1) |
-| `pageSize` | Items per page (default: 20, max: 100) |
-
----
-
-## Data Model
-
-```
-customers         — name, email, phone, address, city, state, zip, country, notes
-invoices          — customer, status, invoice#, dates, PO#, subtotal, tax, total, paid
-line_items        — description, qty, unitPrice, total (FK → invoices, cascade)
-payments          — amount, date, method, reference, notes (FK → invoices, cascade)
-attachments       — file path, MIME, size, ocrExtractedText (FK → invoices, cascade)
-invoice_tags      — tag string (FK → invoices, cascade)
-invoice_notes     — internal notes (FK → invoices, cascade)
-invoices_fts      — FTS5 virtual table: invoice#, customer, email, phone, PO, notes, tags, OCR text
-```
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `file:./dev.db` | SQLite database path |
-| `PORT` | `3001` | Server port |
-| `UPLOAD_DIR` | `uploads` | Directory for uploaded files |
-| `MAX_FILE_SIZE_MB` | `20` | Max upload size in MB |
-| `OCR_PROVIDER` | `tesseract` | OCR backend: `tesseract` \| `google-vision` \| `aws-textract` |
-| `NODE_ENV` | `development` | Environment |
+| Param | Example | Description |
+|-------|---------|-------------|
+| `q` | `acme consulting` | Full-text query |
+| `status` | `sent` | draft / sent / paid / overdue / void |
+| `minTotal` | `500` | Minimum invoice total |
+| `maxTotal` | `10000` | Maximum invoice total |
+| `issueDateFrom` | `2024-01-01` | Issue date range start |
+| `issueDateTo` | `2024-12-31` | Issue date range end |
+| `dueDateFrom` | `2024-01-01` | Due date range start |
+| `dueDateTo` | `2024-12-31` | Due date range end |
+| `tags` | `web,design` | Comma-separated tags |
+| `sortBy` | `total` | issueDate / dueDate / total / invoiceNumber / customerName |
+| `sortDir` | `desc` | asc / desc |
+| `page` | `1` | Page number |
+| `pageSize` | `20` | Results per page (max 100) |
