@@ -1,14 +1,9 @@
-/**
- * Smoke tests for the CameraCapturePage component.
- * Tests that the camera UI renders correctly and handles interactions.
- */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CameraCapturePage from '../pages/CameraCapturePage';
 
-// Mock the API module
 vi.mock('../utils/api', () => ({
   default: {
     upload: vi.fn().mockResolvedValue({
@@ -19,21 +14,15 @@ vi.mock('../utils/api', () => ({
       size: 12345,
       ocrText: 'Invoice Number: INV-2024-0001\nTotal: $500.00',
       confidence: 85,
-      parsed: {
-        invoiceNumber: 'INV-2024-0001',
-        total: 500,
-      },
+      parsed: { invoiceNumber: 'INV-2024-0001', total: 500 },
     }),
   },
 }));
 
-// Mock getUserMedia
-const mockGetUserMedia = vi.fn();
 const mockStop = vi.fn();
+const mockGetUserMedia = vi.fn();
 Object.defineProperty(globalThis.navigator, 'mediaDevices', {
-  value: {
-    getUserMedia: mockGetUserMedia,
-  },
+  value: { getUserMedia: mockGetUserMedia },
   writable: true,
 });
 
@@ -45,74 +34,82 @@ function renderPage() {
   );
 }
 
-describe('CameraCapturePage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+beforeEach(() => vi.clearAllMocks());
 
+describe('CameraCapturePage', () => {
   it('renders the page title', () => {
     renderPage();
     expect(screen.getByText('Capture Invoice')).toBeInTheDocument();
   });
 
-  it('renders the Open Camera button', () => {
+  it('shows all three capture option cards', () => {
     renderPage();
-    expect(screen.getByText('Open Camera')).toBeInTheDocument();
+    expect(screen.getByText('Take Photo')).toBeInTheDocument();
+    expect(screen.getByText('Choose from Gallery')).toBeInTheDocument();
+    expect(screen.getByText('Live Camera')).toBeInTheDocument();
   });
 
-  it('renders the Upload Image button', () => {
+  it('Take Photo button has a hidden file input with capture="environment"', () => {
     renderPage();
-    expect(screen.getByText('Upload Image')).toBeInTheDocument();
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const captureInput = Array.from(inputs).find(
+      el => el.getAttribute('capture') === 'environment'
+    );
+    expect(captureInput).toBeTruthy();
+    expect(captureInput?.getAttribute('accept')).toContain('image/*');
   });
 
-  it('shows camera error when getUserMedia is denied', async () => {
-    mockGetUserMedia.mockRejectedValueOnce({ name: 'NotAllowedError', message: 'Permission denied' });
-
+  it('Gallery input accepts images and PDFs', () => {
     renderPage();
-    const cameraBtn = screen.getByText('Open Camera');
-    fireEvent.click(cameraBtn);
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const galleryInput = Array.from(inputs).find(
+      el => !el.getAttribute('capture') && el.getAttribute('accept')?.includes('pdf')
+    );
+    expect(galleryInput).toBeTruthy();
+  });
 
-    // After async rejection, error message should appear
+  it('shows mobile tip text', () => {
+    renderPage();
+    expect(screen.getByText(/Take Photo.*opens your rear camera/i)).toBeInTheDocument();
+  });
+
+  it('shows live camera error when getUserMedia is denied', async () => {
+    mockGetUserMedia.mockRejectedValueOnce({ name: 'NotAllowedError', message: '' });
+    renderPage();
+    fireEvent.click(screen.getByText('Live Camera'));
     await screen.findByText(/Camera permission denied/i);
   });
 
-  it('shows "No camera found" error on NotFoundError', async () => {
-    mockGetUserMedia.mockRejectedValueOnce({ name: 'NotFoundError', message: 'Not found' });
-
+  it('shows HTTPS error when SecurityError occurs', async () => {
+    mockGetUserMedia.mockRejectedValueOnce({ name: 'SecurityError', message: '' });
     renderPage();
-    fireEvent.click(screen.getByText('Open Camera'));
-
-    await screen.findByText(/No camera found/i);
+    fireEvent.click(screen.getByText('Live Camera'));
+    await screen.findByText(/requires HTTPS/i);
   });
 
-  it('opens camera successfully when getUserMedia resolves', async () => {
+  it('shows live camera controls after getUserMedia resolves', async () => {
     const mockStream = {
       getTracks: () => [{ stop: mockStop }],
     } as unknown as MediaStream;
     mockGetUserMedia.mockResolvedValueOnce(mockStream);
-
     renderPage();
-    fireEvent.click(screen.getByText('Open Camera'));
-
-    // After camera opens, "Capture" button should appear
+    fireEvent.click(screen.getByText('Live Camera'));
     await screen.findByText('Capture');
+    expect(screen.getByText('Capture')).toBeInTheDocument();
   });
 
-  it('shows hint text about mobile usage', () => {
+  it('shows Retake and Extract buttons after a gallery file is selected', () => {
     renderPage();
-    expect(screen.getByText(/On mobile, tap "Open Camera"/i)).toBeInTheDocument();
-  });
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const galleryInput = Array.from(inputs).find(
+      el => !el.getAttribute('capture')
+    ) as HTMLInputElement;
 
-  it('has a file input for upload fallback', () => {
-    renderPage();
-    // The hidden file input should exist
-    const fileInput = document.querySelector('input[type="file"]');
-    expect(fileInput).toBeTruthy();
-  });
+    const file = new File(['fake'], 'invoice.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(galleryInput, 'files', { value: [file] });
+    fireEvent.change(galleryInput);
 
-  it('file input accepts image files', () => {
-    renderPage();
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput?.accept).toContain('image/*');
+    expect(screen.getByText(/Extract Text/i)).toBeInTheDocument();
+    expect(screen.getByText('Retake')).toBeInTheDocument();
   });
 });
