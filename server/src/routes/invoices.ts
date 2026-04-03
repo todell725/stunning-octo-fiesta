@@ -351,18 +351,9 @@ export default async function invoiceRoutes(app: FastifyInstance, opts: { authMi
     await pipeline(data.file, fs.createWriteStream(storedPath));
     const stats = fs.statSync(storedPath);
 
-    let ocrText: string | null = null;
-    if (/^image\//i.test(data.mimetype) || data.mimetype === 'application/pdf') {
-      try {
-        const result = await extractTextFromImage(storedPath);
-        ocrText = result.text;
-      } catch (err) {
-        app.log.warn(`OCR failed for ${storedName}: ${err}`);
-      }
-    }
-
+    // OCR is handled client-side via Puter.js — see PATCH endpoint below
     const attachment = await prisma.attachment.create({
-      data: { invoiceId: id, storedPath, originalName: data.filename, mimeType: data.mimetype, size: stats.size, ocrExtractedText: ocrText },
+      data: { invoiceId: id, storedPath, originalName: data.filename, mimeType: data.mimetype, size: stats.size, ocrExtractedText: null },
     });
     await buildFtsDoc(id);
     return reply.status(201).send(attachment);
@@ -376,6 +367,20 @@ export default async function invoiceRoutes(app: FastifyInstance, opts: { authMi
     await prisma.attachment.delete({ where: { id: attachmentId } });
     await buildFtsDoc(id);
     return reply.status(204).send();
+  });
+
+  // PATCH /invoices/:id/attachments/:attachmentId — save OCR text from client-side extraction
+  app.patch('/invoices/:id/attachments/:attachmentId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+    const { ocrText } = req.body as { ocrText?: string };
+    const att = await prisma.attachment.findFirst({ where: { id: attachmentId, invoiceId: id } });
+    if (!att) return reply.status(404).send({ error: 'Attachment not found' });
+    await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { ocrExtractedText: ocrText ?? null },
+    });
+    await buildFtsDoc(id);
+    return { ok: true };
   });
 
   // ── OCR parse (upload screenshot/PDF → extract fields) ────────────────────

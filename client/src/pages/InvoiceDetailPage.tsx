@@ -5,6 +5,7 @@ import {
   Download, CreditCard, Camera
 } from 'lucide-react';
 import api from '../utils/api';
+import { runOcr, isOcrTarget } from '../utils/ocr';
 import { Invoice, Payment } from '../types';
 import { formatCurrency, formatDate, fileSize } from '../utils/format';
 import StatusBadge from '../components/StatusBadge';
@@ -23,6 +24,7 @@ export default function InvoiceDetailPage() {
   const [noteContent, setNoteContent] = useState('');
   const [addingNote, setAddingNote] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [ocrProcessing, setOcrProcessing] = useState<string | null>(null); // attachment id
 
   async function load() {
     try {
@@ -88,8 +90,24 @@ export default function InvoiceDetailPage() {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      await api.upload(`/invoices/${id}/attachments`, fd);
+      const attachment = await api.upload<{ id: string }>(`/invoices/${id}/attachments`, fd);
       load();
+
+      // Run Puter OCR client-side after upload
+      if (isOcrTarget(file.type)) {
+        setOcrProcessing(attachment.id);
+        try {
+          const ocrText = await runOcr(file);
+          if (ocrText.trim()) {
+            await api.patch(`/invoices/${id}/attachments/${attachment.id}`, { ocrText });
+            load();
+          }
+        } catch (ocrErr) {
+          console.warn('Puter OCR failed:', ocrErr);
+        } finally {
+          setOcrProcessing(null);
+        }
+      }
     } catch (err: any) {
       alert(`Upload failed: ${err.message}`);
     }
@@ -255,8 +273,11 @@ export default function InvoiceDetailPage() {
                       </a>
                       <p className="text-xs text-gray-400">
                         {fileSize(att.size)} · {formatDate(att.uploadedAt)}
-                        {att.ocrExtractedText && (
-                          <span className="ml-2 text-green-600">✓ OCR extracted</span>
+                          {ocrProcessing === att.id && (
+                          <span className="ml-2 text-blue-500 animate-pulse">⏳ Extracting text…</span>
+                        )}
+                        {!ocrProcessing && att.ocrExtractedText && (
+                          <span className="ml-2 text-green-600">✓ Text extracted</span>
                         )}
                       </p>
                       {att.ocrExtractedText && (
