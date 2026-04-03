@@ -47,6 +47,14 @@ function put<T>(url: string, body?: unknown) {
   });
 }
 
+function patch<T>(url: string, body?: unknown) {
+  return request<T>(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
 function del(url: string) {
   return request<void>(url, { method: 'DELETE' });
 }
@@ -72,5 +80,5 @@ async function upload<T>(url: string, formData: FormData): Promise<T> {
   return res.json();
 }
 
-export const api = { get, post, put, del, upload };
+export const api = { get, post, put, patch, del, upload };
 export default api;

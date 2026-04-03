@@ -490,18 +490,7 @@ export default async function invoiceRoutes(app: FastifyInstance, opts: { authMi
 
     const stats = fs.statSync(storedPath);
 
-    // Run OCR if it's an image or PDF
-    let ocrText: string | null = null;
-    const isOcrTarget = /^image\//i.test(data.mimetype) || data.mimetype === 'application/pdf';
-    if (isOcrTarget) {
-      try {
-        const ocrResult = await extractTextFromImage(storedPath);
-        ocrText = ocrResult.text;
-      } catch (err) {
-        app.log.warn(`OCR failed for ${storedName}: ${err}`);
-      }
-    }
-
+    // OCR is handled client-side via Puter.js — see PATCH endpoint below
     const attachment = await prisma.attachment.create({
       data: {
         invoiceId: id,
@@ -509,7 +498,7 @@ export default async function invoiceRoutes(app: FastifyInstance, opts: { authMi
         originalName: data.filename,
         mimeType: data.mimetype,
         size: stats.size,
-        ocrExtractedText: ocrText,
+        ocrExtractedText: null,
       },
     });
 
@@ -532,6 +521,27 @@ export default async function invoiceRoutes(app: FastifyInstance, opts: { authMi
     await prisma.attachment.delete({ where: { id: attachmentId } });
     await buildFtsDoc(id);
     return reply.status(204).send();
+  });
+
+  // PATCH /invoices/:id/attachments/:attachmentId — save OCR text from client-side Puter OCR
+  app.patch('/invoices/:id/attachments/:attachmentId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+    const { ocrText } = req.body as { ocrText?: string };
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
+
+    const att = await prisma.attachment.findFirst({ where: { id: attachmentId, invoiceId: id } });
+    if (!att) return reply.status(404).send({ error: 'Attachment not found' });
+
+    await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { ocrExtractedText: ocrText ?? null },
+    });
+    await buildFtsDoc(id);
+    return { ok: true };
   });
 
   // ── OCR Parse endpoint ────────────────────────────────────────────────────
