@@ -3,11 +3,9 @@ FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install deps first (cache layer)
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source and compile
 COPY tsconfig.json ./
 COPY prisma ./prisma/
 COPY src ./src/
@@ -15,32 +13,32 @@ COPY src ./src/
 # Generate Prisma client for target platform
 RUN npx prisma generate
 
-# Compile TypeScript
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
-# Tesseract.js downloads language data at runtime; sharp needs libc
-# sqlite3 native bindings are handled by Prisma (pure-JS driver)
+# openssl required by Prisma engine detection; dumb-init for PID 1
 RUN apk add --no-cache \
     dumb-init \
-    ca-certificates
+    ca-certificates \
+    openssl
 
 WORKDIR /app
 
-# Production deps only
+# Production deps only (no ignore-scripts so Prisma post-install runs)
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
 
-# Copy compiled output + prisma
+# Copy compiled output + prisma schema
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY prisma ./prisma/
 
-# Runtime directories
-RUN mkdir -p /data/uploads && chown -R node:node /data
+# Data directories — owned by node before switching user
+RUN mkdir -p /data/uploads && chown -R node:node /data && chown -R node:node /app
+
 VOLUME ["/data"]
 
 # Run as non-root
@@ -53,6 +51,5 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-# dumb-init handles PID 1 signal forwarding
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
