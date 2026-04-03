@@ -55,4 +55,4 @@ EXPOSE 3001
 
 # dumb-init handles PID 1 signal forwarding
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
