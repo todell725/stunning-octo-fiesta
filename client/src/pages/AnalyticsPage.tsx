@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={currencyTick} tick={{ fontSize: 11 }} width={56} />
                 <Tooltip
-                  formatter={(v: number) => formatCurrency(v)}
+                  formatter={(v: any) => formatCurrency(Number(v))}
                   labelFormatter={(l) => `Bucket: ${l}`}
                 />
                 <Bar dataKey="amount" name="Outstanding" radius={[4, 4, 0, 0]}>
@@ -290,8 +290,8 @@ export default function AnalyticsPage() {
                   paddingAngle={2}
                   dataKey="value"
                   nameKey="name"
-                  label={({ name, percent }) =>
-                    percent > 0.04 ? `${name} ${(percent * 100).toFixed(0)}%` : ''
+                  label={({ name, percent }: any) =>
+                    (percent ?? 0) > 0.04 ? `${name} ${((percent ?? 0) * 100).toFixed(0)}%` : ''
                   }
                   labelLine={false}
                 >
@@ -302,7 +302,7 @@ export default function AnalyticsPage() {
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -333,7 +333,7 @@ export default function AnalyticsPage() {
                   tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 15) + '…' : v}
                 />
                 <Tooltip
-                  formatter={(v: number, name: string) => [formatCurrency(v), name]}
+                  formatter={(v: any, name: any) => [formatCurrency(Number(v)), name]}
                 />
                 <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="totalSpend" name="Total Invoiced" fill="#3b82f6" radius={[0, 4, 4, 0]} />
@@ -363,7 +363,7 @@ export default function AnalyticsPage() {
                   width={90}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
                 <Bar dataKey="totalSpend" name="Spend" radius={[0, 4, 4, 0]}>
                   {tags.slice(0, 8).map((_, i) => (
                     <Cell key={i} fill={TAG_COLORS[i % TAG_COLORS.length]} />
