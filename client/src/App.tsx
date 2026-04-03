@@ -1,12 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
-  FileText, Users, Search, Camera, LayoutDashboard, Menu, X, BarChart2, LogOut, MapPin
+  FileText, Users, Search, Camera, LayoutDashboard, Menu, X, BarChart2, LogOut, MapPin, Settings
 } from 'lucide-react';
 import { useState } from 'react';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
+import SettingsPage from './pages/SettingsPage';
 import InvoicesPage from './pages/InvoicesPage';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import InvoiceFormPage from './pages/InvoiceFormPage';
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { to: '/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/capture', icon: Camera, label: 'Capture' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 // Role badge colors
@@ -170,6 +172,7 @@ function ProtectedApp() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/capture" element={<CameraCapturePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
