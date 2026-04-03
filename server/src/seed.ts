@@ -19,58 +19,68 @@ const LOCATIONS = [
 ];
 
 // ── Users ──────────────────────────────────────────────────────────────────
-// Passwords are printed to the console after seeding.
 const USER_DEFS = [
   { username: 'westerncenter', displayName: 'Western Center', role: 'staff',  locationName: 'WesternCenter', password: 'wc1234' },
   { username: 'mansfield',     displayName: 'Mansfield',      role: 'staff',  locationName: 'Mansfield',     password: 'mansfield1234' },
   { username: 'vickery',       displayName: 'Vickery',        role: 'staff',  locationName: 'Vickery',       password: 'vickery1234' },
   { username: 'dave',          displayName: 'Dave',           role: 'owner',  locationName: null,            password: 'dave1234' },
-  { username: 'support',       displayName: 'Support',        role: 'admin',  locationName: null,            password: 'support1234' },
 ];
 
-// ── Sample vendors (split across locations) ────────────────────────────────
+// ── Vendors (pizza franchise suppliers) ───────────────────────────────────
 const VENDOR_POOL = [
-  // Western Center vendors
-  { name: 'Arrow Freight Co',      email: 'billing@arrowfreight.com',   phone: '555-100-0001', locationName: 'WesternCenter' },
-  { name: 'Summit Supply Chain',   email: 'ap@summitsupply.com',        phone: '555-100-0002', locationName: 'WesternCenter' },
-  // Mansfield vendors
-  { name: 'MidState Logistics',    email: 'invoices@midstate.com',      phone: '555-200-0001', locationName: 'Mansfield' },
-  { name: 'Cornerstone Parts',     email: 'billing@cornerstoneparts.net', phone: '555-200-0002', locationName: 'Mansfield' },
-  // Vickery vendors
-  { name: 'Vickery Transport LLC', email: 'ap@vickerytransport.com',    phone: '555-300-0001', locationName: 'Vickery' },
-  { name: 'Plains Parts & Supply', email: 'orders@plainsparts.com',     phone: '555-300-0002', locationName: 'Vickery' },
-  // Shared / cross-location (assigned to all three by Dave)
-  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'WesternCenter' },
-  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'Mansfield' },
-  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'Vickery' },
+  // Western Center
+  { name: 'Sysco Foods',             email: 'billing@sysco.com',          phone: '555-100-0001', locationName: 'WesternCenter' },
+  { name: 'Roma Foods Distributor',  email: 'ap@romafoods.com',           phone: '555-100-0002', locationName: 'WesternCenter' },
+  // Mansfield
+  { name: 'US Foods',                email: 'invoices@usfoods.com',       phone: '555-200-0001', locationName: 'Mansfield' },
+  { name: 'Bacio Cheese Co.',        email: 'billing@baciocheese.com',    phone: '555-200-0002', locationName: 'Mansfield' },
+  // Vickery
+  { name: 'Performance Food Group',  email: 'ap@pfgc.com',               phone: '555-300-0001', locationName: 'Vickery' },
+  { name: 'Stanislaus Food Products',email: 'orders@stanislaus.com',     phone: '555-300-0002', locationName: 'Vickery' },
+  // Shared suppliers (one entry per location)
+  { name: 'Cintas Uniform Services', email: 'billing@cintas.com',        phone: '555-400-0001', locationName: 'WesternCenter' },
+  { name: 'Cintas Uniform Services', email: 'billing@cintas.com',        phone: '555-400-0001', locationName: 'Mansfield' },
+  { name: 'Cintas Uniform Services', email: 'billing@cintas.com',        phone: '555-400-0001', locationName: 'Vickery' },
+  { name: 'Arctic Air HVAC & Equip', email: 'service@arcticair.com',     phone: '555-500-0001', locationName: 'WesternCenter' },
+  { name: 'Arctic Air HVAC & Equip', email: 'service@arcticair.com',     phone: '555-500-0001', locationName: 'Mansfield' },
+  { name: 'Arctic Air HVAC & Equip', email: 'service@arcticair.com',     phone: '555-500-0001', locationName: 'Vickery' },
 ];
 
-const SERVICES = [
-  { description: 'Truck repair — engine overhaul',  unitPrice: 2800 },
-  { description: 'Tires — set of 6 (18-wheeler)',   unitPrice: 1800 },
-  { description: 'Fuel delivery — diesel (500 gal)', unitPrice: 1650 },
-  { description: 'DOT inspection & compliance',      unitPrice: 450 },
-  { description: 'Oil change & filter service',      unitPrice: 320 },
-  { description: 'Brake system service',             unitPrice: 975 },
-  { description: 'Refrigeration unit maintenance',   unitPrice: 1200 },
-  { description: 'Inventory parts — miscellaneous',  unitPrice: 600 },
-  { description: 'Trailer hitch & coupling repair',  unitPrice: 740 },
-  { description: 'Emergency roadside service call',  unitPrice: 390 },
+// ── Line item types ────────────────────────────────────────────────────────
+const SUPPLIES = [
+  { description: 'Mozzarella cheese — 6 lb bags (case of 6)',  unitPrice: 148 },
+  { description: 'Pizza dough balls — 16 oz (case of 48)',      unitPrice: 96  },
+  { description: 'Crushed tomato sauce — #10 cans (case of 6)', unitPrice: 58  },
+  { description: 'Pepperoni — sliced, 25 lb bag',               unitPrice: 112 },
+  { description: 'Pizza boxes — 16" (bundle of 50)',            unitPrice: 44  },
+  { description: 'Corrugated box liners (case of 200)',         unitPrice: 32  },
+  { description: 'Cooking oil — soy blend, 35 lb jug',         unitPrice: 68  },
+  { description: 'Italian sausage — crumbled, 10 lb roll',     unitPrice: 89  },
+  { description: 'Shredded parmesan — 5 lb bag',               unitPrice: 47  },
+  { description: 'Disposable gloves — box of 100',             unitPrice: 18  },
+  { description: 'Food-safe sanitizer — 2.5 gal',              unitPrice: 29  },
+  { description: 'Paper napkins — restaurant pack (3000 ct)',   unitPrice: 36  },
+  { description: 'Walk-in cooler repair & service call',        unitPrice: 320 },
+  { description: 'Oven conveyor belt replacement',              unitPrice: 485 },
+  { description: 'Hood vent cleaning service',                  unitPrice: 275 },
+  { description: 'POS system maintenance — monthly',           unitPrice: 150 },
+  { description: 'Uniforms & aprons — staff (monthly)',         unitPrice: 210 },
+  { description: 'Grease trap pump-out service',                unitPrice: 195 },
 ];
 
 const STATUSES: Array<'draft' | 'sent' | 'paid' | 'overdue' | 'void'> = [
-  'draft', 'sent', 'paid', 'overdue', 'void',
+  'paid', 'paid', 'paid', 'sent', 'overdue', 'draft',
 ];
 
 const TAGS = [
-  ['truck-repair'],
-  ['tires'],
-  ['fuel'],
-  ['inspection'],
+  ['food'],
+  ['cheese'],
+  ['packaging'],
+  ['equipment'],
   ['maintenance'],
-  ['parts'],
-  ['emergency'],
-  ['refrigeration'],
+  ['uniforms'],
+  ['supplies'],
+  ['produce'],
 ];
 
 function randomItem<T>(arr: T[]): T {
@@ -90,7 +100,7 @@ async function main() {
 
   await setupFTS();
 
-  // ── Clear existing data (order matters for FK constraints) ─────────────────
+  // ── Clear existing data ────────────────────────────────────────────────────
   await prisma.invoiceNote.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.invoiceTag.deleteMany();
@@ -102,15 +112,15 @@ async function main() {
   await prisma.location.deleteMany();
   await prisma.$executeRawUnsafe(`DELETE FROM invoices_fts`).catch(() => {});
 
-  // ── Create locations ───────────────────────────────────────────────────────
-  const locationMap = new Map<string, string>(); // name -> id
+  // ── Locations ──────────────────────────────────────────────────────────────
+  const locationMap = new Map<string, string>();
   for (const loc of LOCATIONS) {
     const created = await prisma.location.create({ data: loc });
     locationMap.set(loc.name, created.id);
   }
   console.log(`  ✔ Created ${LOCATIONS.length} locations`);
 
-  // ── Create users ───────────────────────────────────────────────────────────
+  // ── Users ──────────────────────────────────────────────────────────────────
   for (const def of USER_DEFS) {
     const passwordHash = await hashPassword(def.password);
     await prisma.user.create({
@@ -131,40 +141,35 @@ async function main() {
   }
   console.log('');
 
-  // ── Create customers ───────────────────────────────────────────────────────
+  // ── Customers ──────────────────────────────────────────────────────────────
   const customers: { id: string; name: string; email: string | null; phone: string | null; locationId: string | null }[] = [];
   for (const v of VENDOR_POOL) {
     const locationId = locationMap.get(v.locationName) ?? null;
     const c = await prisma.customer.create({
-      data: {
-        name: v.name,
-        email: v.email,
-        phone: v.phone,
-        locationId,
-      },
+      data: { name: v.name, email: v.email, phone: v.phone, locationId },
     });
     customers.push({ ...c });
   }
-  console.log(`  ✔ Created ${customers.length} customers`);
+  console.log(`  ✔ Created ${customers.length} vendors/suppliers`);
 
-  // ── Create invoices ────────────────────────────────────────────────────────
+  // ── Invoices ───────────────────────────────────────────────────────────────
   let invoiceSeq = 1;
   const now = new Date();
 
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 45; i++) {
     const customer = randomItem(customers);
     const status = randomItem(STATUSES);
-    const issueDate = addDays(now, -randomInt(0, 180));
-    const dueDate = addDays(issueDate, randomInt(14, 45));
+    const issueDate = addDays(now, -randomInt(0, 90));
+    const dueDate = addDays(issueDate, randomInt(14, 30));
     const invoiceNumber = `INV-${now.getFullYear()}-${String(invoiceSeq++).padStart(4, '0')}`;
-    const taxRate = randomItem([0, 0, 0, 5, 8.5]); // mostly no tax on truck invoices
+    const taxRate = 0; // food/supply invoices typically no sales tax
     const tags = randomItem(TAGS);
     const poNumber = Math.random() > 0.4 ? `PO-${randomInt(1000, 9999)}` : null;
 
-    const numItems = randomInt(1, 3);
+    const numItems = randomInt(1, 4);
     const lineItemsData = Array.from({ length: numItems }, () => {
-      const svc = randomItem(SERVICES);
-      const quantity = randomInt(1, 5);
+      const svc = randomItem(SUPPLIES);
+      const quantity = randomInt(1, 8);
       return { description: svc.description, quantity, unitPrice: svc.unitPrice };
     });
 
@@ -178,8 +183,8 @@ async function main() {
     let paidDate: Date | null = null;
     if (status === 'paid') {
       amountPaid = total;
-      paidDate = addDays(dueDate, -randomInt(0, 10));
-    } else if (status === 'overdue' && Math.random() > 0.7) {
+      paidDate = addDays(issueDate, randomInt(7, 21));
+    } else if (status === 'overdue' && Math.random() > 0.6) {
       amountPaid = Math.round(total * 0.5 * 100) / 100;
     }
 
@@ -198,7 +203,15 @@ async function main() {
         subtotal,
         total,
         amountPaid,
-        notes: Math.random() > 0.6 ? `Fleet invoice — truck service at ${customer.name}` : null,
+        notes: Math.random() > 0.6
+          ? randomItem([
+              'Weekly standing order.',
+              'Delivery confirmed — received short by 2 cases, credit requested.',
+              'Price increase effective next order — check contract.',
+              'Paid via company check.',
+              'Net 30 terms.',
+            ])
+          : null,
         lineItems: { create: lineItems },
         tags: { create: tags.map((tag) => ({ tag })) },
       },
@@ -219,24 +232,23 @@ async function main() {
         data: {
           invoiceId: invoice.id,
           amount: amountPaid,
-          paymentDate: addDays(issueDate, randomInt(5, 20)),
+          paymentDate: addDays(issueDate, randomInt(5, 15)),
           method: 'check',
-          notes: 'Partial payment received',
+          notes: 'Partial payment — balance pending',
         },
       });
     }
 
-    if (Math.random() > 0.6) {
+    if (Math.random() > 0.65) {
       await prisma.invoiceNote.create({
         data: {
           invoiceId: invoice.id,
           content: randomItem([
-            'Called vendor — payment expected next week.',
-            'Follow up via email sent.',
-            'Awaiting PO approval.',
-            'Dispute raised — investigating.',
-            'Vendor confirmed receipt.',
-            'Truck back in service.',
+            'Called supplier — payment confirmed.',
+            'Awaiting credit memo for short delivery.',
+            'Matched to PO — approved for payment.',
+            'Price discrepancy — checking with supplier.',
+            'Recurring weekly order.',
           ]),
         },
       });
@@ -256,7 +268,7 @@ async function main() {
     }).catch(() => {});
   }
 
-  console.log(`  ✔ Created 40 invoices with line items, payments, and notes`);
+  console.log(`  ✔ Created 45 invoices with line items, payments, and notes`);
   console.log('🎉  Seed complete!');
 }
 
