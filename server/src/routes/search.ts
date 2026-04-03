@@ -1,66 +1,51 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { stringify } from 'csv-stringify/sync';
 import { searchInvoices, SearchOptions } from '../services/fts';
-import { getUser, locationFilter } from '../middleware/requireAuth';
 
 export default async function searchRoutes(app: FastifyInstance, opts: { authMiddleware: any[] }) {
   const { authMiddleware } = opts;
 
-  // GET /api/search — full-text + filtered search
-  app.get('/search', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const user = getUser(req);
-    const locFilter = locationFilter(user);
+  app.get('/search', { preHandler: authMiddleware }, async (req: FastifyRequest) => {
     const q = req.query as Record<string, string>;
-
     const opts: SearchOptions = {
       query: q.q,
       status: q.status,
       customerId: q.customerId,
-      locationId: locFilter?.locationId,
       minTotal: q.minTotal ? parseFloat(q.minTotal) : undefined,
       maxTotal: q.maxTotal ? parseFloat(q.maxTotal) : undefined,
       issueDateFrom: q.issueDateFrom,
       issueDateTo: q.issueDateTo,
       dueDateFrom: q.dueDateFrom,
       dueDateTo: q.dueDateTo,
-      tags: q.tags ? q.tags.split(',').map((t) => t.trim()) : undefined,
+      tags: q.tags ? q.tags.split(',').map(t => t.trim()) : undefined,
       sortBy: q.sortBy as SearchOptions['sortBy'],
       sortDir: q.sortDir as SearchOptions['sortDir'],
       page: q.page ? parseInt(q.page) : 1,
       pageSize: q.pageSize ? parseInt(q.pageSize) : 20,
     };
-
-    const result = await searchInvoices(opts);
-    return result;
+    return searchInvoices(opts);
   });
 
-  // GET /api/search/export — same but returns CSV
   app.get('/search/export', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const user = getUser(req);
-    const locFilter = locationFilter(user);
     const q = req.query as Record<string, string>;
-
     const opts: SearchOptions = {
       query: q.q,
       status: q.status,
       customerId: q.customerId,
-      locationId: locFilter?.locationId,
       minTotal: q.minTotal ? parseFloat(q.minTotal) : undefined,
       maxTotal: q.maxTotal ? parseFloat(q.maxTotal) : undefined,
       issueDateFrom: q.issueDateFrom,
       issueDateTo: q.issueDateTo,
       dueDateFrom: q.dueDateFrom,
       dueDateTo: q.dueDateTo,
-      tags: q.tags ? q.tags.split(',').map((t) => t.trim()) : undefined,
+      tags: q.tags ? q.tags.split(',').map(t => t.trim()) : undefined,
       sortBy: q.sortBy as SearchOptions['sortBy'],
       sortDir: q.sortDir as SearchOptions['sortDir'],
       page: 1,
-      pageSize: 10000, // export all
+      pageSize: 10000,
     };
-
     const result = await searchInvoices(opts);
-
-    const rows = result.invoices.map((inv) => ({
+    const rows = result.invoices.map(inv => ({
       invoice_number: inv.invoiceNumber,
       status: inv.status,
       customer_name: inv.customerName,
@@ -76,9 +61,7 @@ export default async function searchRoutes(app: FastifyInstance, opts: { authMid
       tags: inv.tags.join(', '),
       notes: inv.notes || '',
     }));
-
     const csv = stringify(rows, { header: true });
-
     reply.header('Content-Type', 'text/csv');
     reply.header('Content-Disposition', 'attachment; filename="invoices-export.csv"');
     return reply.send(csv);

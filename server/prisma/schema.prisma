@@ -7,46 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Location {
-  id        String     @id @default(cuid())
-  name      String     @unique  // "WesternCenter" | "Mansfield" | "Vickery"
-  label     String              // Display label e.g. "Western Center"
-  customers Customer[]
-  invoices  Invoice[]
-  users     User[]
-
-  @@map("locations")
-}
-
 model User {
-  id          String    @id @default(cuid())
-  username    String    @unique
-  password    String    // bcrypt hash
+  id          String   @id @default(cuid())
+  username    String   @unique
+  password    String   // bcrypt hash
   displayName String
-  role        String    @default("staff") // "staff" | "owner" | "admin"
-  locationId  String?   // null = all locations (owner / admin)
-  location    Location? @relation(fields: [locationId], references: [id])
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
   @@map("users")
 }
 
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String    @default("#6366f1")
+  invoices  Invoice[]
+  createdAt DateTime  @default(now())
+
+  @@map("categories")
+}
+
 model Customer {
-  id         String    @id @default(cuid())
-  name       String
-  email      String?
-  phone      String?
-  address    String?
-  city       String?
-  state      String?
-  zip        String?
-  country    String?   @default("US")
-  notes      String?
-  locationId String?
-  location   Location? @relation(fields: [locationId], references: [id])
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  invoices   Invoice[]
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  state     String?
+  zip       String?
+  country   String?   @default("US")
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  invoices  Invoice[]
 
   @@map("customers")
 }
@@ -56,8 +50,8 @@ model Invoice {
   invoiceNumber String        @unique
   customerId    String
   customer      Customer      @relation(fields: [customerId], references: [id])
-  locationId    String?
-  location      Location?     @relation(fields: [locationId], references: [id])
+  categoryId    String?
+  category      Category?     @relation(fields: [categoryId], references: [id])
   status        String        @default("draft")
   issueDate     DateTime      @default(now())
   dueDate       DateTime?

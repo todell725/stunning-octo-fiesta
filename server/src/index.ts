@@ -17,6 +17,7 @@ import customerRoutes from './routes/customers';
 import invoiceRoutes from './routes/invoices';
 import searchRoutes from './routes/search';
 import analyticsRoutes from './routes/analytics';
+import categoryRoutes from './routes/categories';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
@@ -77,10 +78,11 @@ async function buildApp() {
   // All other routes require a valid JWT
   const authMiddleware = [(app as any).authenticate];
 
-  await app.register(customerRoutes, { prefix: '/api', authMiddleware });
-  await app.register(invoiceRoutes,  { prefix: '/api', authMiddleware });
-  await app.register(searchRoutes,   { prefix: '/api', authMiddleware });
-  await app.register(analyticsRoutes,{ prefix: '/api', authMiddleware });
+  await app.register(categoryRoutes,  { prefix: '/api', authMiddleware });
+  await app.register(customerRoutes,  { prefix: '/api', authMiddleware });
+  await app.register(invoiceRoutes,   { prefix: '/api', authMiddleware });
+  await app.register(searchRoutes,    { prefix: '/api', authMiddleware });
+  await app.register(analyticsRoutes, { prefix: '/api', authMiddleware });
 
   return app;
 }
