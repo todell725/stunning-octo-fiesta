@@ -7,29 +7,55 @@ import dotenv from 'dotenv';
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import prisma, { setupFTS } from './db';
-// Ensure FTS table exists before seeding
 import { recalcTotals } from './utils/invoiceTotals';
 import { upsertFtsDocument } from './services/fts';
+import { hashPassword } from './services/auth';
 
-const CUSTOMERS = [
-  { name: 'Acme Corporation', email: 'billing@acme.com', phone: '555-100-0001', address: '100 Main St', city: 'Springfield', state: 'IL', zip: '62701', country: 'US' },
-  { name: 'Globex Industries', email: 'ap@globex.com', phone: '555-200-0002', address: '200 Industrial Blvd', city: 'Shelbyville', state: 'TN', zip: '37160', country: 'US' },
-  { name: 'Initech LLC', email: 'payments@initech.net', phone: '555-300-0003', address: '300 Office Park', city: 'Austin', state: 'TX', zip: '73301', country: 'US' },
-  { name: 'Umbrella Corp', email: 'finance@umbrella.org', phone: '555-400-0004', address: '400 Raccoon Rd', city: 'Raccoon City', state: 'MI', zip: '48201', country: 'US' },
-  { name: 'Stark Industries', email: 'tony@stark.io', phone: '555-500-0005', address: '500 Malibu Point', city: 'Malibu', state: 'CA', zip: '90265', country: 'US' },
+// ── Locations ──────────────────────────────────────────────────────────────
+const LOCATIONS = [
+  { name: 'WesternCenter', label: 'Western Center' },
+  { name: 'Mansfield',     label: 'Mansfield' },
+  { name: 'Vickery',       label: 'Vickery' },
+];
+
+// ── Users ──────────────────────────────────────────────────────────────────
+// Passwords are printed to the console after seeding.
+const USER_DEFS = [
+  { username: 'westerncenter', displayName: 'Western Center', role: 'staff',  locationName: 'WesternCenter', password: 'wc1234' },
+  { username: 'mansfield',     displayName: 'Mansfield',      role: 'staff',  locationName: 'Mansfield',     password: 'mansfield1234' },
+  { username: 'vickery',       displayName: 'Vickery',        role: 'staff',  locationName: 'Vickery',       password: 'vickery1234' },
+  { username: 'dave',          displayName: 'Dave',           role: 'owner',  locationName: null,            password: 'dave1234' },
+  { username: 'support',       displayName: 'Support',        role: 'admin',  locationName: null,            password: 'support1234' },
+];
+
+// ── Sample vendors (split across locations) ────────────────────────────────
+const VENDOR_POOL = [
+  // Western Center vendors
+  { name: 'Arrow Freight Co',      email: 'billing@arrowfreight.com',   phone: '555-100-0001', locationName: 'WesternCenter' },
+  { name: 'Summit Supply Chain',   email: 'ap@summitsupply.com',        phone: '555-100-0002', locationName: 'WesternCenter' },
+  // Mansfield vendors
+  { name: 'MidState Logistics',    email: 'invoices@midstate.com',      phone: '555-200-0001', locationName: 'Mansfield' },
+  { name: 'Cornerstone Parts',     email: 'billing@cornerstoneparts.net', phone: '555-200-0002', locationName: 'Mansfield' },
+  // Vickery vendors
+  { name: 'Vickery Transport LLC', email: 'ap@vickerytransport.com',    phone: '555-300-0001', locationName: 'Vickery' },
+  { name: 'Plains Parts & Supply', email: 'orders@plainsparts.com',     phone: '555-300-0002', locationName: 'Vickery' },
+  // Shared / cross-location (assigned to all three by Dave)
+  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'WesternCenter' },
+  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'Mansfield' },
+  { name: 'National Tire Depot',   email: 'fleet@nationaltire.com',     phone: '555-400-0001', locationName: 'Vickery' },
 ];
 
 const SERVICES = [
-  { description: 'Web Development Services', unitPrice: 150 },
-  { description: 'UI/UX Design', unitPrice: 120 },
-  { description: 'Backend API Development', unitPrice: 140 },
-  { description: 'DevOps & CI/CD Setup', unitPrice: 130 },
-  { description: 'Database Architecture', unitPrice: 160 },
-  { description: 'Security Audit', unitPrice: 200 },
-  { description: 'Mobile App Development', unitPrice: 175 },
-  { description: 'Tech Support (monthly)', unitPrice: 500 },
-  { description: 'Consulting (hourly)', unitPrice: 250 },
-  { description: 'Cloud Infrastructure Setup', unitPrice: 300 },
+  { description: 'Truck repair — engine overhaul',  unitPrice: 2800 },
+  { description: 'Tires — set of 6 (18-wheeler)',   unitPrice: 1800 },
+  { description: 'Fuel delivery — diesel (500 gal)', unitPrice: 1650 },
+  { description: 'DOT inspection & compliance',      unitPrice: 450 },
+  { description: 'Oil change & filter service',      unitPrice: 320 },
+  { description: 'Brake system service',             unitPrice: 975 },
+  { description: 'Refrigeration unit maintenance',   unitPrice: 1200 },
+  { description: 'Inventory parts — miscellaneous',  unitPrice: 600 },
+  { description: 'Trailer hitch & coupling repair',  unitPrice: 740 },
+  { description: 'Emergency roadside service call',  unitPrice: 390 },
 ];
 
 const STATUSES: Array<'draft' | 'sent' | 'paid' | 'overdue' | 'void'> = [
@@ -37,24 +63,22 @@ const STATUSES: Array<'draft' | 'sent' | 'paid' | 'overdue' | 'void'> = [
 ];
 
 const TAGS = [
-  ['web', 'design'],
-  ['backend', 'api'],
-  ['mobile'],
-  ['consulting'],
-  ['support', 'monthly'],
-  ['priority'],
-  ['government'],
-  ['retainer'],
+  ['truck-repair'],
+  ['tires'],
+  ['fuel'],
+  ['inspection'],
+  ['maintenance'],
+  ['parts'],
+  ['emergency'],
+  ['refrigeration'],
 ];
 
 function randomItem<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
-
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -64,10 +88,9 @@ function addDays(date: Date, days: number): Date {
 async function main() {
   console.log('🌱  Starting seed...');
 
-  // Create FTS table if not exists
   await setupFTS();
 
-  // Clear existing data
+  // ── Clear existing data (order matters for FK constraints) ─────────────────
   await prisma.invoiceNote.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.invoiceTag.deleteMany();
@@ -75,37 +98,74 @@ async function main() {
   await prisma.lineItem.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.customer.deleteMany();
-
-  // Clear FTS
+  await prisma.user.deleteMany();
+  await prisma.location.deleteMany();
   await prisma.$executeRawUnsafe(`DELETE FROM invoices_fts`).catch(() => {});
 
-  // Create customers
-  const customers = await Promise.all(
-    CUSTOMERS.map((c) => prisma.customer.create({ data: c }))
-  );
+  // ── Create locations ───────────────────────────────────────────────────────
+  const locationMap = new Map<string, string>(); // name -> id
+  for (const loc of LOCATIONS) {
+    const created = await prisma.location.create({ data: loc });
+    locationMap.set(loc.name, created.id);
+  }
+  console.log(`  ✔ Created ${LOCATIONS.length} locations`);
+
+  // ── Create users ───────────────────────────────────────────────────────────
+  for (const def of USER_DEFS) {
+    const passwordHash = await hashPassword(def.password);
+    await prisma.user.create({
+      data: {
+        username: def.username,
+        password: passwordHash,
+        displayName: def.displayName,
+        role: def.role,
+        locationId: def.locationName ? (locationMap.get(def.locationName) ?? null) : null,
+      },
+    });
+  }
+  console.log(`  ✔ Created ${USER_DEFS.length} users`);
+  console.log('');
+  console.log('  Login credentials:');
+  for (const u of USER_DEFS) {
+    console.log(`    ${u.username.padEnd(16)} / ${u.password}  (${u.role})`);
+  }
+  console.log('');
+
+  // ── Create customers ───────────────────────────────────────────────────────
+  const customers: { id: string; name: string; email: string | null; phone: string | null; locationId: string | null }[] = [];
+  for (const v of VENDOR_POOL) {
+    const locationId = locationMap.get(v.locationName) ?? null;
+    const c = await prisma.customer.create({
+      data: {
+        name: v.name,
+        email: v.email,
+        phone: v.phone,
+        locationId,
+      },
+    });
+    customers.push({ ...c });
+  }
   console.log(`  ✔ Created ${customers.length} customers`);
 
-  // Create invoices
+  // ── Create invoices ────────────────────────────────────────────────────────
   let invoiceSeq = 1;
   const now = new Date();
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 40; i++) {
     const customer = randomItem(customers);
     const status = randomItem(STATUSES);
     const issueDate = addDays(now, -randomInt(0, 180));
-    const dueDate = addDays(issueDate, randomInt(14, 60));
+    const dueDate = addDays(issueDate, randomInt(14, 45));
     const invoiceNumber = `INV-${now.getFullYear()}-${String(invoiceSeq++).padStart(4, '0')}`;
-    const taxRate = randomItem([0, 5, 8.5, 10]);
+    const taxRate = randomItem([0, 0, 0, 5, 8.5]); // mostly no tax on truck invoices
     const tags = randomItem(TAGS);
-    const poNumber = Math.random() > 0.5 ? `PO-${randomInt(1000, 9999)}` : null;
+    const poNumber = Math.random() > 0.4 ? `PO-${randomInt(1000, 9999)}` : null;
 
-    // Random 1-4 line items
-    const numItems = randomInt(1, 4);
+    const numItems = randomInt(1, 3);
     const lineItemsData = Array.from({ length: numItems }, () => {
       const svc = randomItem(SERVICES);
-      const quantity = randomInt(1, 40);
-      const unitPrice = svc.unitPrice;
-      return { description: svc.description, quantity, unitPrice };
+      const quantity = randomInt(1, 5);
+      return { description: svc.description, quantity, unitPrice: svc.unitPrice };
     });
 
     const lineItems = lineItemsData.map((li) => ({
@@ -120,13 +180,14 @@ async function main() {
       amountPaid = total;
       paidDate = addDays(dueDate, -randomInt(0, 10));
     } else if (status === 'overdue' && Math.random() > 0.7) {
-      amountPaid = Math.round(total * 0.5 * 100) / 100; // partial
+      amountPaid = Math.round(total * 0.5 * 100) / 100;
     }
 
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber,
         customerId: customer.id,
+        locationId: customer.locationId,
         status,
         issueDate,
         dueDate,
@@ -137,13 +198,12 @@ async function main() {
         subtotal,
         total,
         amountPaid,
-        notes: Math.random() > 0.6 ? `Thank you for your business! Net ${randomInt(15, 30)} days.` : null,
+        notes: Math.random() > 0.6 ? `Fleet invoice — truck service at ${customer.name}` : null,
         lineItems: { create: lineItems },
         tags: { create: tags.map((tag) => ({ tag })) },
       },
     });
 
-    // Add payment records for paid invoices
     if (status === 'paid') {
       await prisma.payment.create({
         data: {
@@ -166,24 +226,22 @@ async function main() {
       });
     }
 
-    // Add internal notes to some invoices
     if (Math.random() > 0.6) {
       await prisma.invoiceNote.create({
         data: {
           invoiceId: invoice.id,
           content: randomItem([
-            'Called client — payment expected next week.',
+            'Called vendor — payment expected next week.',
             'Follow up via email sent.',
-            'Awaiting PO approval from client.',
+            'Awaiting PO approval.',
             'Dispute raised — investigating.',
-            'Client confirmed receipt.',
+            'Vendor confirmed receipt.',
+            'Truck back in service.',
           ]),
         },
       });
     }
 
-    // Update FTS
-    const tagsStr = tags.join(' ');
     await upsertFtsDocument({
       invoiceId: invoice.id,
       invoiceNumber,
@@ -192,13 +250,13 @@ async function main() {
       customerPhone: customer.phone || '',
       poNumber: poNumber || '',
       notes: invoice.notes || '',
-      tags: tagsStr,
+      tags: tags.join(' '),
       ocrText: '',
       status,
     }).catch(() => {});
   }
 
-  console.log(`  ✔ Created 30 invoices with line items, payments, and notes`);
+  console.log(`  ✔ Created 40 invoices with line items, payments, and notes`);
   console.log('🎉  Seed complete!');
 }
 

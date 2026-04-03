@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
+import jwt from '@fastify/jwt';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -11,6 +12,7 @@ const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
 dotenv.config({ path: path.join(__dirname, '..', envFile) });
 
 import { setupFTS } from './db';
+import authRoutes from './routes/auth';
 import customerRoutes from './routes/customers';
 import invoiceRoutes from './routes/invoices';
 import searchRoutes from './routes/search';
@@ -18,9 +20,9 @@ import analyticsRoutes from './routes/analytics';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+const JWT_SECRET = process.env.JWT_SECRET || 'invoice-tracker-dev-secret-change-in-prod';
 
 async function buildApp() {
-  // Ensure upload directory exists
   if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   }
@@ -35,16 +37,28 @@ async function buildApp() {
     },
   });
 
+  // JWT — must be registered before routes that use authenticate
+  await app.register(jwt, { secret: JWT_SECRET });
+
+  // Decorate app with authenticate preHandler
+  app.decorate('authenticate', async (req: any, reply: any) => {
+    try {
+      await req.jwtVerify();
+    } catch {
+      reply.status(401).send({ error: 'Unauthorised' });
+    }
+  });
+
   // CORS
   await app.register(cors, {
     origin: process.env.NODE_ENV === 'production' ? false : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  // Multipart (file uploads) — max 20 MB
+  // Multipart (file uploads)
   await app.register(multipart, {
     limits: {
-      fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB || '20') * 1024 * 1024),
+      fileSize: parseInt(process.env.MAX_FILE_SIZE_MB || '20') * 1024 * 1024,
     },
   });
 
@@ -54,14 +68,19 @@ async function buildApp() {
     prefix: '/uploads/',
   });
 
-  // Health check
+  // Health check (public)
   app.get('/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
 
-  // Register routes
-  await app.register(customerRoutes, { prefix: '/api' });
-  await app.register(invoiceRoutes, { prefix: '/api' });
-  await app.register(searchRoutes, { prefix: '/api' });
-  await app.register(analyticsRoutes, { prefix: '/api' });
+  // Auth routes (public — login doesn't need a token)
+  await app.register(authRoutes, { prefix: '/api' });
+
+  // All other routes require a valid JWT
+  const authMiddleware = [(app as any).authenticate];
+
+  await app.register(customerRoutes, { prefix: '/api', authMiddleware });
+  await app.register(invoiceRoutes,  { prefix: '/api', authMiddleware });
+  await app.register(searchRoutes,   { prefix: '/api', authMiddleware });
+  await app.register(analyticsRoutes,{ prefix: '/api', authMiddleware });
 
   return app;
 }
@@ -70,10 +89,7 @@ export { buildApp };
 
 async function main() {
   const app = await buildApp();
-
-  // Set up FTS tables (idempotent)
   await setupFTS();
-
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 }

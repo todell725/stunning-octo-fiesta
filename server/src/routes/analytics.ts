@@ -1,51 +1,55 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import prisma from '../db';
+import { getUser } from '../middleware/requireAuth';
 
-export default async function analyticsRoutes(app: FastifyInstance) {
+export default async function analyticsRoutes(app: FastifyInstance, opts: { authMiddleware: any[] }) {
+  const { authMiddleware } = opts;
 
   // ── Summary KPIs ──────────────────────────────────────────────────────────
-  app.get('/analytics/summary', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/summary', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND "locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     const [
       totalRow,
       byStatus,
       overdueRow,
       avgDaysRow,
     ] = await Promise.all([
-      // Total invoices, spend, paid, outstanding
       prisma.$queryRawUnsafe<{ count: number; total_spend: number; total_paid: number }[]>(`
         SELECT
           COUNT(*) as count,
           COALESCE(SUM(total), 0) as total_spend,
           COALESCE(SUM("amountPaid"), 0) as total_paid
         FROM invoices
-        WHERE status != 'void'
-      `),
+        WHERE status != 'void' ${locClause}
+      `, ...locParam),
 
-      // Count + amount by status
       prisma.$queryRawUnsafe<{ status: string; count: number; amount: number }[]>(`
         SELECT status, COUNT(*) as count, COALESCE(SUM(total), 0) as amount
         FROM invoices
-        WHERE status != 'void'
+        WHERE status != 'void' ${locClause}
         GROUP BY status
-      `),
+      `, ...locParam),
 
-      // Overdue: unpaid past due date
       prisma.$queryRawUnsafe<{ count: number; amount: number }[]>(`
         SELECT COUNT(*) as count, COALESCE(SUM(total - "amountPaid"), 0) as amount
         FROM invoices
         WHERE status NOT IN ('paid','void')
           AND "dueDate" IS NOT NULL
           AND "dueDate" < datetime('now')
-      `),
+          ${locClause}
+      `, ...locParam),
 
-      // Average days from issue to paid (for paid invoices)
       prisma.$queryRawUnsafe<{ avg_days: number | null }[]>(`
         SELECT AVG(CAST(
           (julianday("paidDate") - julianday("issueDate")) AS REAL
         )) as avg_days
         FROM invoices
-        WHERE status = 'paid' AND "paidDate" IS NOT NULL
-      `),
+        WHERE status = 'paid' AND "paidDate" IS NOT NULL ${locClause}
+      `, ...locParam),
     ]);
 
     const summary = totalRow[0] || { count: 0, total_spend: 0, total_paid: 0 };
@@ -69,7 +73,12 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // ── Monthly trend (last 13 months) ────────────────────────────────────────
-  app.get('/analytics/monthly', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/monthly', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND "locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     // Build last 13 months as YYYY-MM strings
     const months: string[] = [];
     const now = new Date();
@@ -92,9 +101,10 @@ export default async function analyticsRoutes(app: FastifyInstance) {
       FROM invoices
       WHERE status != 'void'
         AND "issueDate" >= date('now', '-13 months')
+        ${locClause}
       GROUP BY strftime('%Y-%m', "issueDate")
       ORDER BY month ASC
-    `);
+    `, ...locParam);
 
     // Fill in zero months
     const rowMap = new Map(rows.map(r => [r.month, r]));
@@ -113,7 +123,12 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // ── Invoice aging buckets ─────────────────────────────────────────────────
-  app.get('/analytics/aging', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/aging', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND "locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     const rows = await prisma.$queryRawUnsafe<{
       bucket: string;
       count: number;
@@ -134,9 +149,9 @@ export default async function analyticsRoutes(app: FastifyInstance) {
         COUNT(*) as count,
         COALESCE(SUM(total - "amountPaid"), 0) as amount
       FROM invoices
-      WHERE status NOT IN ('paid', 'void')
+      WHERE status NOT IN ('paid', 'void') ${locClause}
       GROUP BY bucket
-    `);
+    `, ...locParam);
 
     const order = ['current', '1-30', '31-60', '61-90', '90+'];
     const rowMap = new Map(rows.map(r => [r.bucket, r]));
@@ -149,7 +164,12 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // ── Top vendors by spend ──────────────────────────────────────────────────
-  app.get('/analytics/top-vendors', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/top-vendors', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND i."locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     const { limit = '10' } = req.query as { limit?: string };
     const rows = await prisma.$queryRawUnsafe<{
       customer_id: string;
@@ -166,11 +186,11 @@ export default async function analyticsRoutes(app: FastifyInstance) {
         COALESCE(SUM(i."amountPaid"), 0) as total_paid
       FROM customers c
       JOIN invoices i ON i."customerId" = c.id
-      WHERE i.status != 'void'
+      WHERE i.status != 'void' ${locClause}
       GROUP BY c.id, c.name
       ORDER BY total_spend DESC
       LIMIT ?
-    `, parseInt(limit));
+    `, ...locParam, parseInt(limit));
 
     return rows.map(r => ({
       customerId: r.customer_id,
@@ -183,7 +203,12 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // ── Spend by tag (truck/category breakdown) ───────────────────────────────
-  app.get('/analytics/by-tag', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/by-tag', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND i."locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     const rows = await prisma.$queryRawUnsafe<{
       tag: string;
       invoice_count: number;
@@ -195,11 +220,11 @@ export default async function analyticsRoutes(app: FastifyInstance) {
         COALESCE(SUM(i.total), 0) as total_spend
       FROM invoice_tags t
       JOIN invoices i ON i.id = t."invoiceId"
-      WHERE i.status != 'void'
+      WHERE i.status != 'void' ${locClause}
       GROUP BY t.tag
       ORDER BY total_spend DESC
       LIMIT 20
-    `);
+    `, ...locParam);
 
     return rows.map(r => ({
       tag: r.tag,
@@ -209,7 +234,12 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // ── Overdue invoices list (actionable) ───────────────────────────────────
-  app.get('/analytics/overdue', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/analytics/overdue', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locClause = isGlobal ? '' : `AND i."locationId" = ?`;
+    const locParam: string[] = isGlobal ? [] : [user.locationId ?? '__none__'];
+
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         i.id,
@@ -226,9 +256,10 @@ export default async function analyticsRoutes(app: FastifyInstance) {
       WHERE i.status NOT IN ('paid', 'void')
         AND i."dueDate" IS NOT NULL
         AND i."dueDate" < datetime('now')
+        ${locClause}
       ORDER BY days_overdue DESC
       LIMIT 50
-    `);
+    `, ...locParam);
 
     return rows.map(r => ({
       id: r.id,

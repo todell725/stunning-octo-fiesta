@@ -11,6 +11,7 @@ import { generateInvoiceNumber } from '../utils/invoiceNumber';
 import { upsertFtsDocument, deleteFtsDocument } from '../services/fts';
 import { extractTextFromImage } from '../services/ocr';
 import { parseOcrText } from '../services/ocrParser';
+import { getUser, locationFilter, assertLocation } from '../middleware/requireAuth';
 
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
 
@@ -32,6 +33,7 @@ const CreateInvoiceSchema = z.object({
   notes: z.string().max(5000).optional().nullable(),
   tags: z.array(z.string().max(50)).optional(),
   lineItems: z.array(LineItemSchema).optional(),
+  locationId: z.string().optional().nullable(),
 });
 
 const UpdateInvoiceSchema = CreateInvoiceSchema.partial();
@@ -67,12 +69,17 @@ async function buildFtsDoc(invoiceId: string) {
   });
 }
 
-export default async function invoiceRoutes(app: FastifyInstance) {
+export default async function invoiceRoutes(app: FastifyInstance, opts: { authMiddleware: any[] }) {
+  const { authMiddleware } = opts;
+
   // ── List invoices ─────────────────────────────────────────────────────────
-  app.get('/invoices', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/invoices', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const locFilter = locationFilter(user);
     const { status, customerId, page = '1', pageSize = '20' } = req.query as Record<string, string>;
     const skip = (parseInt(page) - 1) * parseInt(pageSize);
-    const where: any = {};
+
+    const where: any = locFilter ? { ...locFilter } : {};
     if (status) where.status = status;
     if (customerId) where.customerId = customerId;
 
@@ -95,7 +102,8 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── Get single invoice ────────────────────────────────────────────────────
-  app.get('/invoices/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/invoices/:id', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const invoice = await prisma.invoice.findUnique({
       where: { id },
@@ -109,17 +117,23 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       },
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
     return invoice;
   });
 
   // ── Create invoice ────────────────────────────────────────────────────────
-  app.post('/invoices', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const parsed = CreateInvoiceSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
     const data = parsed.data;
     const customer = await prisma.customer.findUnique({ where: { id: data.customerId } });
     if (!customer) return reply.status(400).send({ error: 'Customer not found' });
+
+    // Staff can only create invoices in their own location
+    const isGlobal = user.role === 'owner' || user.role === 'admin';
+    const locationId = isGlobal ? (data.locationId ?? customer.locationId) : user.locationId;
 
     const invoiceNumber = data.invoiceNumber || (await generateInvoiceNumber());
     const lineItems = (data.lineItems || []).map((li) => ({
@@ -133,6 +147,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       data: {
         invoiceNumber,
         customerId: data.customerId,
+        locationId,
         status: data.status || 'draft',
         issueDate: data.issueDate ? new Date(data.issueDate) : new Date(),
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
@@ -159,7 +174,8 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── Update invoice ────────────────────────────────────────────────────────
-  app.put('/invoices/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.put('/invoices/:id', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const parsed = UpdateInvoiceSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
@@ -169,6 +185,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       include: { lineItems: true },
     });
     if (!existing) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, existing.locationId, reply)) return;
 
     const data = parsed.data;
 
@@ -239,24 +256,27 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── Delete invoice ────────────────────────────────────────────────────────
-  app.delete('/invoices/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/invoices/:id', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
-    try {
-      // Delete attachment files
-      const attachments = await prisma.attachment.findMany({ where: { invoiceId: id } });
-      for (const att of attachments) {
-        if (fs.existsSync(att.storedPath)) fs.unlinkSync(att.storedPath);
-      }
-      await prisma.invoice.delete({ where: { id } });
-      await deleteFtsDocument(id);
-      return reply.status(204).send();
-    } catch {
-      return reply.status(404).send({ error: 'Invoice not found' });
+
+    const existing = await prisma.invoice.findUnique({ where: { id } });
+    if (!existing) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, existing.locationId, reply)) return;
+
+    // Delete attachment files
+    const attachments = await prisma.attachment.findMany({ where: { invoiceId: id } });
+    for (const att of attachments) {
+      if (fs.existsSync(att.storedPath)) fs.unlinkSync(att.storedPath);
     }
+    await prisma.invoice.delete({ where: { id } });
+    await deleteFtsDocument(id);
+    return reply.status(204).send();
   });
 
   // ── Line items ────────────────────────────────────────────────────────────
-  app.post('/invoices/:id/line-items', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/:id/line-items', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const parsed = LineItemSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
@@ -266,6 +286,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       include: { lineItems: true },
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     const li = await prisma.lineItem.create({
       data: {
@@ -284,10 +305,15 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return reply.status(201).send(li);
   });
 
-  app.put('/invoices/:id/line-items/:itemId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.put('/invoices/:id/line-items/:itemId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id, itemId } = req.params as { id: string; itemId: string };
     const parsed = LineItemSchema.partial().safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     const existing = await prisma.lineItem.findFirst({ where: { id: itemId, invoiceId: id } });
     if (!existing) return reply.status(404).send({ error: 'Line item not found' });
@@ -299,26 +325,32 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       data: { ...parsed.data, total: Math.round(quantity * unitPrice * 100) / 100 },
     });
 
-    const invoice = await prisma.invoice.findUnique({
+    const fullInvoice = await prisma.invoice.findUnique({
       where: { id },
       include: { lineItems: true },
     });
-    if (invoice) {
-      const { subtotal, taxAmount, total } = recalcTotals(invoice.lineItems, invoice.taxRate);
+    if (fullInvoice) {
+      const { subtotal, taxAmount, total } = recalcTotals(fullInvoice.lineItems, fullInvoice.taxRate);
       await prisma.invoice.update({ where: { id }, data: { subtotal, taxAmount, total } });
     }
     return updated;
   });
 
-  app.delete('/invoices/:id/line-items/:itemId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/invoices/:id/line-items/:itemId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id, itemId } = req.params as { id: string; itemId: string };
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
+
     await prisma.lineItem.deleteMany({ where: { id: itemId, invoiceId: id } });
-    const invoice = await prisma.invoice.findUnique({
+    const fullInvoice = await prisma.invoice.findUnique({
       where: { id },
       include: { lineItems: true },
     });
-    if (invoice) {
-      const { subtotal, taxAmount, total } = recalcTotals(invoice.lineItems, invoice.taxRate);
+    if (fullInvoice) {
+      const { subtotal, taxAmount, total } = recalcTotals(fullInvoice.lineItems, fullInvoice.taxRate);
       await prisma.invoice.update({ where: { id }, data: { subtotal, taxAmount, total } });
     }
     return reply.status(204).send();
@@ -333,7 +365,8 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     notes: z.string().max(1000).optional().nullable(),
   });
 
-  app.post('/invoices/:id/payments', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/:id/payments', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const parsed = PaymentSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
@@ -343,6 +376,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       include: { payments: true },
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     const payment = await prisma.payment.create({
       data: {
@@ -372,21 +406,30 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return reply.status(201).send(payment);
   });
 
-  app.delete('/invoices/:id/payments/:paymentId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/invoices/:id/payments/:paymentId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id, paymentId } = req.params as { id: string; paymentId: string };
-    await prisma.payment.deleteMany({ where: { id: paymentId, invoiceId: id } });
 
     const invoice = await prisma.invoice.findUnique({
       where: { id },
       include: { payments: true },
     });
-    if (invoice) {
-      const totalPaid = invoice.payments.reduce((s, p) => s + p.amount, 0);
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
+
+    await prisma.payment.deleteMany({ where: { id: paymentId, invoiceId: id } });
+
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { payments: true },
+    });
+    if (updatedInvoice) {
+      const totalPaid = updatedInvoice.payments.reduce((s, p) => s + p.amount, 0);
       await prisma.invoice.update({
         where: { id },
         data: {
           amountPaid: Math.round(totalPaid * 100) / 100,
-          status: totalPaid >= invoice.total ? 'paid' : 'sent',
+          status: totalPaid >= updatedInvoice.total ? 'paid' : 'sent',
         },
       });
     }
@@ -394,10 +437,15 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── Notes ─────────────────────────────────────────────────────────────────
-  app.post('/invoices/:id/notes', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/:id/notes', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const { content } = req.body as { content?: string };
     if (!content?.trim()) return reply.status(400).send({ error: 'content required' });
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     const note = await prisma.invoiceNote.create({
       data: { invoiceId: id, content: content.trim() },
@@ -406,17 +454,25 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return reply.status(201).send(note);
   });
 
-  app.delete('/invoices/:id/notes/:noteId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/invoices/:id/notes/:noteId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id, noteId } = req.params as { id: string; noteId: string };
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
+
     await prisma.invoiceNote.deleteMany({ where: { id: noteId, invoiceId: id } });
     return reply.status(204).send();
   });
 
   // ── Attachments (upload) ──────────────────────────────────────────────────
-  app.post('/invoices/:id/attachments', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/:id/attachments', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     let data: MultipartFile | undefined;
     try {
@@ -461,8 +517,14 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return reply.status(201).send(attachment);
   });
 
-  app.delete('/invoices/:id/attachments/:attachmentId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/invoices/:id/attachments/:attachmentId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
+
     const att = await prisma.attachment.findFirst({ where: { id: attachmentId, invoiceId: id } });
     if (!att) return reply.status(404).send({ error: 'Attachment not found' });
 
@@ -473,11 +535,12 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── OCR Parse endpoint ────────────────────────────────────────────────────
-  // POST /api/invoices/:id/ocr-parse — runs OCR + parsing on an uploaded image
-  app.post('/invoices/:id/ocr-parse', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/:id/ocr-parse', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
     const { id } = req.params as { id: string };
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!assertLocation(user, invoice.locationId, reply)) return;
 
     let data: MultipartFile | undefined;
     try {
@@ -496,7 +559,6 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       const ocrResult = await extractTextFromImage(storedPath);
       const parsed = parseOcrText(ocrResult.text);
 
-      // Save as attachment with OCR text
       const stats = fs.statSync(storedPath);
       const attachment = await prisma.attachment.create({
         data: {
@@ -523,8 +585,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   });
 
   // ── Upload (camera/mobile) + auto-create invoice ──────────────────────────
-  // POST /api/invoices/upload — phone camera workflow
-  app.post('/invoices/upload', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/invoices/upload', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     let data: MultipartFile | undefined;
     try {
       data = await req.file();

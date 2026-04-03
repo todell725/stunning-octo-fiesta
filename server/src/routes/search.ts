@@ -1,16 +1,22 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { stringify } from 'csv-stringify/sync';
 import { searchInvoices, SearchOptions } from '../services/fts';
+import { getUser, locationFilter } from '../middleware/requireAuth';
 
-export default async function searchRoutes(app: FastifyInstance) {
+export default async function searchRoutes(app: FastifyInstance, opts: { authMiddleware: any[] }) {
+  const { authMiddleware } = opts;
+
   // GET /api/search — full-text + filtered search
-  app.get('/search', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/search', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const locFilter = locationFilter(user);
     const q = req.query as Record<string, string>;
 
     const opts: SearchOptions = {
       query: q.q,
       status: q.status,
       customerId: q.customerId,
+      locationId: locFilter?.locationId,
       minTotal: q.minTotal ? parseFloat(q.minTotal) : undefined,
       maxTotal: q.maxTotal ? parseFloat(q.maxTotal) : undefined,
       issueDateFrom: q.issueDateFrom,
@@ -29,13 +35,16 @@ export default async function searchRoutes(app: FastifyInstance) {
   });
 
   // GET /api/search/export — same but returns CSV
-  app.get('/search/export', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/search/export', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(req);
+    const locFilter = locationFilter(user);
     const q = req.query as Record<string, string>;
 
     const opts: SearchOptions = {
       query: q.q,
       status: q.status,
       customerId: q.customerId,
+      locationId: locFilter?.locationId,
       minTotal: q.minTotal ? parseFloat(q.minTotal) : undefined,
       maxTotal: q.maxTotal ? parseFloat(q.maxTotal) : undefined,
       issueDateFrom: q.issueDateFrom,

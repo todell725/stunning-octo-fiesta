@@ -50,6 +50,7 @@ export interface SearchOptions {
   query?: string;
   status?: string;
   customerId?: string;
+  locationId?: string;
   minTotal?: number;
   maxTotal?: number;
   issueDateFrom?: string;
@@ -134,6 +135,11 @@ export async function searchInvoices(opts: SearchOptions): Promise<SearchResult>
   if (opts.customerId) {
     conditions.push(`i."customerId" = ?`);
     params.push(opts.customerId);
+  }
+
+  if (opts.locationId !== undefined) {
+    conditions.push(`i."locationId" = ?`);
+    params.push(opts.locationId);
   }
 
   if (opts.minTotal !== undefined) {
